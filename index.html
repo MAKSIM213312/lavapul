@@ -306,7 +306,7 @@
     { id: 'eruptions', goals: [3, 6],      text: (g) => `Устрой ${g} извержений` },
     { id: 'bombs',     goals: [15, 40],    text: (g) => `Поймай ${g} лавовых бомб` },
     { id: 'meteors',   goals: [1, 3],      text: (g) => `Поймай метеориты: ${g}` },
-    { id: 'bosses',    goals: [1, 2],      text: (g) => `Победи боссов: ${g}`, min: 5000 },
+    { id: 'bosses',    goals: [1, 2],      text: (g) => `Победи боссов: ${g}`, min: 1000 },
     { id: 'spins',     goals: [1, 2],      text: (g) => `Крутани колесо удачи: ${g}` },
     { id: 'buys',      goals: [5, 15],     text: (g) => `Купи ${g} улучшений или источников` },
     { id: 'maxCombo',  goals: [60, 120],   text: (g) => `Набери комбо ${g}` },
@@ -449,7 +449,10 @@
   // ================= Состояние сцены =================
   let heat = 0, erupting = 0, combo = 0, lastTap = -10, bump = 0, flash = 0, golemBob = 0;
   let bombs = [], parts = [], floats = [], meteor = null, cloud = null, boss = null;
-  let bombT = 0, eventT = 25, bossT = 150, smokeT = 0, golemT = 0, time = 0;
+  // Первый босс приходит через ~40 с после открытия игры, следующие раз в 1,5–2,5 минуты
+  const BOSS_MIN_LAVA = 1000;
+  const nextBossDelay = () => 90 + Math.random() * 60;
+  let bombT = 0, eventT = 25, bossT = 40, smokeT = 0, golemT = 0, time = 0;
 
   // ================= Холст =================
   const sceneEl = document.getElementById('scene');
@@ -618,7 +621,7 @@
 
   function spawnBoss() {
     const k = BOSSES[(Math.random() * BOSSES.length) | 0];
-    const hp = tapBase() * 1.4 * 150 * (1 + 0.1 * Math.min(S.bossLevel, 30));
+    const hp = tapBase() * 100 * (1 + 0.08 * Math.min(S.bossLevel, 30));
     boss = { ...k, hp, maxHp: hp, t: 30, shake: 0 };
     haptic('heavy');
     sfx('boss');
@@ -641,7 +644,7 @@
       haptic('success');
       sfx('win');
       boss = null;
-      bossT = 150 + Math.random() * 120;
+      bossT = nextBossDelay();
       save(true);
     }
   }
@@ -795,9 +798,10 @@
 
     // Боссы
     if (!boss) {
-      if (S.allTime >= 5000 && erupting <= 0 && !cloud && !meteor) {
+      // Отсчёт идёт всегда; если сейчас извержение или событие, босс приходит сразу после него
+      if (S.allTime >= BOSS_MIN_LAVA) {
         bossT -= dt;
-        if (bossT <= 0) spawnBoss();
+        if (bossT <= 0 && erupting <= 0 && !cloud && !meteor) spawnBoss();
       }
     } else {
       boss.t -= dt;
@@ -806,7 +810,7 @@
         floatText(W / 2, H * 0.3, `${boss.icon} ${boss.name} ушёл…`, '#ff8a8a', 22);
         sfx('lose');
         boss = null;
-        bossT = 150 + Math.random() * 120;
+        bossT = nextBossDelay();
       }
     }
 
@@ -1013,6 +1017,15 @@
       ctx.fillStyle = m >= comboMax() - 0.01 ? '#ff4d4d' : '#ffd166';
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText('⚡ Комбо ×' + m.toFixed(1), 18, 54);
+    }
+
+    // Предупреждение о боссе
+    if (!boss && S.allTime >= BOSS_MIN_LAVA && bossT <= 20) {
+      const s = Math.max(0, Math.ceil(bossT));
+      ctx.font = '800 14px system-ui, sans-serif';
+      ctx.fillStyle = s <= 5 ? `rgba(255,90,90,${0.6 + 0.4 * Math.sin(time * 12)})` : '#ff9a9a';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText(s > 0 ? `👹 Босс через ${s} с` : '👹 Босс идёт!', W - 70, 54);
     }
 
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
